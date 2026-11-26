@@ -784,7 +784,7 @@ private fun RudraScreen(
                         }
                     },
                     enabled = input.isNotBlank() && !sending,
-                    modifier = Modifier.size(50.dp).background(if (input.isNotBlank() && !sending) cyan else Color(0xFF26394F), CircleShape)
+                    modifier = Modifier.size(50.dp).background(if ((input.isNotBlank() || selectedImage != null) && !sending) cyan else Color(0xFF26394F), CircleShape)
                 ) { Icon(Icons.Default.Send, contentDescription = "Send message", tint = night) }
             }
             Spacer(Modifier.height(5.dp))
@@ -809,7 +809,7 @@ private fun submitMessage(
     text: String,
     current: List<ChatMessage>,
     localCommand: (String) -> String?,
-    askShiva: (List<ChatMessage>, (String) -> Unit, (String?) -> Unit) -> Unit,
+    askShiva: (List<ChatMessage>, RudraImageAttachment?, (String) -> Unit, (String?) -> Unit) -> Unit,
     speak: (String) -> Unit,
     updateMessages: (List<ChatMessage>) -> Unit,
     updateSending: (Boolean) -> Unit,

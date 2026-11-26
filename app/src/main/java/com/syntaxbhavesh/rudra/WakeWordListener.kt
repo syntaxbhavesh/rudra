@@ -47,7 +47,7 @@ class WakeWordListener(
                     override fun onRmsChanged(rmsdB: Float) {}
                     override fun onBufferReceived(buffer: ByteArray?) {}
                     override fun onEndOfSpeech() {}
-                    override fun onError(error: Int) { arm() }
+                    override fun onError(error: Int) { stopRecognizer(); arm() }
                     override fun onResults(results: android.os.Bundle?) {
                         val candidates = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
                         if (candidates.any(::isWakePhrase)) {
@@ -92,8 +92,7 @@ class WakeWordListener(
             .trim()
         return normalized.contains("hey rudra") ||
             normalized.contains("hey roodra") ||
-            normalized.contains("hey rudrah") ||
-            normalized == "rudra"
+            normalized.contains("hey rudrah")
     }
 
     private fun stopRecognizer() {

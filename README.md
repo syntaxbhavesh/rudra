@@ -12,7 +12,7 @@ RUDRA is an independent Android assistant. Its Android app, UI, settings and rep
 - Streamed Shiva AI responses displayed in the chat
 - On-device chat history persistence (up to 200 non-empty messages)
 - Clear conversation control with confirmation
-- Local commands for time/date and opening YouTube, WhatsApp, Chrome or Android Settings
+- Local commands for time/date, listing launchable apps, and opening installed apps by their displayed name (plus Android Settings)
 - GitHub Actions debug APK workflow
 
 ## Shiva AI integration

@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DeleteOutline
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -68,12 +69,41 @@ class MainActivity : ComponentActivity() {
                 RudraScreen(
                     onSpeak = { speak(it) },
                     onListen = { success, failure -> listen(success, failure) },
-                    onLaunch = { launchApp(it) },
+                    initialMessages = loadChatHistory(),
+                    onSaveMessages = { saveChatHistory(it) },
                     onLocalCommand = { localCommand(it) },
                     onAskShiva = { history, onChunk, onComplete -> askShiva(history, onChunk, onComplete) }
                 )
             }
         }
+    }
+
+    private fun loadChatHistory(): List<ChatMessage> {
+        val raw = getSharedPreferences("rudra_chat", MODE_PRIVATE).getString("messages", null)
+            ?: return listOf(ChatMessage(role = "assistant", text = "RUDRA online. Ask me anything, or tap the microphone to speak."))
+        return runCatching {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { index ->
+                val item = array.getJSONObject(index)
+                val role = item.optString("role")
+                val text = item.optString("text")
+                if ((role == "user" || role == "assistant") && text.isNotBlank()) {
+                    ChatMessage(id = item.optString("id").ifBlank { UUID.randomUUID().toString() }, role = role, text = text)
+                } else null
+            }.takeLast(200).ifEmpty {
+                listOf(ChatMessage(role = "assistant", text = "RUDRA online. Ask me anything, or tap the microphone to speak."))
+            }
+        }.getOrElse {
+            listOf(ChatMessage(role = "assistant", text = "RUDRA online. Your saved chat could not be read, so a fresh conversation is ready."))
+        }
+    }
+
+    private fun saveChatHistory(messages: List<ChatMessage>) {
+        val array = JSONArray()
+        messages.filter { it.text.isNotBlank() }.takeLast(200).forEach { message ->
+            array.put(JSONObject().put("id", message.id).put("role", message.role).put("text", message.text))
+        }
+        getSharedPreferences("rudra_chat", MODE_PRIVATE).edit().putString("messages", array.toString()).apply()
     }
 
     private fun speak(text: String) {
@@ -211,12 +241,14 @@ class MainActivity : ComponentActivity() {
 private fun RudraScreen(
     onSpeak: (String) -> Unit,
     onListen: ((String) -> Unit, (String) -> Unit) -> Unit,
-    onLaunch: (String) -> Boolean,
+    initialMessages: List<ChatMessage>,
+    onSaveMessages: (List<ChatMessage>) -> Unit,
     onLocalCommand: (String) -> String?,
     onAskShiva: (List<ChatMessage>, (String) -> Unit, (String?) -> Unit) -> Unit
 ) {
-    var messages by remember { mutableStateOf(listOf(ChatMessage(role = "assistant", text = "RUDRA online. Ask me anything, or tap the microphone to speak."))) }
+    var messages by remember { mutableStateOf(initialMessages) }
     var input by remember { mutableStateOf("") }
+    var showClearDialog by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("SHIVA AI CONNECTED") }
     var sending by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -234,8 +266,29 @@ private fun RudraScreen(
         }
     }
 
-    LaunchedEffect(messages.size, messages.lastOrNull()?.text) {
+    LaunchedEffect(messages) {
+        onSaveMessages(messages)
         if (messages.isNotEmpty()) listState.animateScrollToItem(messages.lastIndex)
+    }
+
+    if (showClearDialog) {
+        AlertDialog(
+            onDismissRequest = { showClearDialog = false },
+            title = { Text("Clear conversation?") },
+            text = { Text("This removes the chat saved on this device. It cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    messages = listOf(ChatMessage(role = "assistant", text = "RUDRA online. Your conversation has been cleared."))
+                    showClearDialog = false
+                }) { Text("Clear chat", color = Color(0xFFFF8A80)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearDialog = false }) { Text("Cancel") }
+            },
+            containerColor = panel,
+            titleContentColor = Color.White,
+            textContentColor = Color(0xFFD3DFEC)
+        )
     }
 
     Box(Modifier.fillMaxSize().background(Brush.verticalGradient(listOf(Color(0xFF0B1B32), night)))) {
@@ -245,9 +298,14 @@ private fun RudraScreen(
                     Text("R.U.D.R.A.", color = cyan, fontSize = 25.sp, fontWeight = FontWeight.Black, letterSpacing = 3.sp)
                     Text("RESPONSIVE UTILITY • DIALOGUE • ROBOTIC ASSISTANT", color = Color.LightGray, fontSize = 7.sp)
                 }
-                Column(horizontalAlignment = Alignment.End) {
-                    Text("AI LINK", color = Color.LightGray, fontSize = 9.sp)
-                    Text(status, color = if (sending || status == "LISTENING") Color(0xFFFFC857) else cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text("AI LINK", color = Color.LightGray, fontSize = 9.sp)
+                        Text(status, color = if (sending || status == "LISTENING") Color(0xFFFFC857) else cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold)
+                    }
+                    IconButton(onClick = { if (!sending) showClearDialog = true }, enabled = !sending) {
+                        Icon(Icons.Default.DeleteOutline, contentDescription = "Clear conversation", tint = Color(0xFF9CB6D4))
+                    }
                 }
             }
             Spacer(Modifier.height(12.dp))

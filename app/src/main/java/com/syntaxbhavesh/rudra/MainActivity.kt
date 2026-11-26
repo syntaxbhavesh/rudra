@@ -401,10 +401,6 @@ class MainActivity : ComponentActivity() {
                 val count = ReminderScheduler.cancelAll(this)
                 "Cancelled $count pending reminder(s)."
             }
-            command == "clear notification history" -> {
-                getSharedPreferences("rudra_notifications", MODE_PRIVATE).edit().remove("items").apply()
-                "Local notification history cleared."
-            }
             command.startsWith("search web for ") -> openWebSearch(command.removePrefix("search web for ").trim())
             command.startsWith("search the web for ") -> openWebSearch(command.removePrefix("search the web for ").trim())
             command.startsWith("google ") -> openWebSearch(command.removePrefix("google ").trim())

@@ -408,6 +408,15 @@ class MainActivity : ComponentActivity() {
                     "${item.optString("app")}: ${item.optString("title")} — ${item.optString("text")}".take(220)
                 }
             } else "Notification access is off. Say “open notification access” to enable it in Android settings."
+            command in listOf("show reminders", "list reminders", "what are my reminders") -> {
+                val reminders = ReminderScheduler.pendingReminders(this)
+                if (reminders.isEmpty()) "You have no pending RUDRA reminders."
+                else "Pending reminders:\\n" + reminders.joinToString("\\n") { "• $it" }
+            }
+            command in listOf("cancel all reminders", "clear reminders") -> {
+                val count = ReminderScheduler.cancelAll(this)
+                "Cancelled $count pending reminder(s)."
+            }
             command == "clear notification history" -> {
                 getSharedPreferences("rudra_notifications", MODE_PRIVATE).edit().remove("items").apply()
                 "Local notification history cleared."
@@ -460,6 +469,7 @@ class MainActivity : ComponentActivity() {
                 }
                 val messages = JSONArray()
                 val filteredHistory = history.filter { it.text.isNotBlank() && (it.role == "user" || it.role == "assistant") }
+                    .takeLast(if (attachment != null) 12 else 40)
                 filteredHistory.forEach { message ->
                     val parts = JSONArray().put(JSONObject().put("type", "text").put("text", message.text))
                     if (attachment != null && message.id == filteredHistory.lastOrNull()?.id && message.role == "user") {

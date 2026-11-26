@@ -252,6 +252,64 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openWebSearch(query: String): String {
+        if (query.isBlank()) return "Tell me what you want to search for."
+        val intent = Intent(Intent.ACTION_WEB_SEARCH).putExtra(android.app.SearchManager.QUERY, query)
+        return try {
+            startActivity(intent)
+            "Opening web search results for: $query"
+        } catch (_: Exception) {
+            val url = "https://www.google.com/search?q=" + java.net.URLEncoder.encode(query, "UTF-8")
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                "Opening browser results for: $query"
+            } catch (_: Exception) {
+                "I couldn't open a browser for that search."
+            }
+        }
+    }
+
+    private fun openMaps(query: String): String {
+        if (query.isBlank()) return "Tell me a place or destination to find."
+        val uri = android.net.Uri.parse("geo:0,0?q=" + java.net.URLEncoder.encode(query, "UTF-8"))
+        return try {
+            startActivity(Intent(Intent.ACTION_VIEW, uri))
+            "Opening Maps for: $query"
+        } catch (_: Exception) {
+            "A maps app wasn't available on this device."
+        }
+    }
+
+    private fun openCalendarEvent(title: String): String {
+        if (title.isBlank()) return "Tell me the event title, for example: create calendar event Physics revision."
+        return try {
+            startActivity(Intent(Intent.ACTION_INSERT).setData(android.provider.CalendarContract.Events.CONTENT_URI).apply {
+                putExtra(android.provider.CalendarContract.Events.TITLE, title)
+                putExtra(android.provider.CalendarContract.Events.DESCRIPTION, "Created with RUDRA")
+            })
+            "Opening your calendar to review the event: $title. Choose its date and time, then save it."
+        } catch (_: Exception) {
+            "A calendar app that can create events wasn't available."
+        }
+    }
+
+    private fun openComposer(kind: String): String =
+        try {
+            val intent = when (kind) {
+                "email" -> Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("mailto:"))
+                "message" -> Intent(Intent.ACTION_SENDTO, android.net.Uri.parse("smsto:"))
+                else -> Intent(Intent.ACTION_DIAL)
+            }
+            startActivity(intent)
+            when (kind) {
+                "email" -> "Opening your email app to compose a message."
+                "message" -> "Opening your messaging app. Choose a recipient and review your message before sending."
+                else -> "Opening the phone dialer. Review the number before placing a call."
+            }
+        } catch (_: Exception) {
+            "The requested app wasn't available."
+        }
+
     private fun localCommand(raw: String): String? {
         val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
         val openPrefix = listOf("open ", "launch ", "start ").firstOrNull { command.startsWith(it) }
@@ -265,7 +323,21 @@ class MainActivity : ComponentActivity() {
                 } ?: "I couldn't find any launchable apps."
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
-            command == "help" || command == "what can you do" -> "I can answer questions using Shiva AI, speak replies, open installed apps, list apps, set alarms and timers through your Clock app, and open Android settings panels."
+            command == "help" || command == "what can you do" ->
+                "I can answer with Shiva AI, speak replies, open installed apps, list apps, set alarms and timers, open system settings, search the web, find places in Maps, create calendar events, and open email, messaging or phone composers."
+            command.startsWith("search web for ") -> openWebSearch(command.removePrefix("search web for ").trim())
+            command.startsWith("search the web for ") -> openWebSearch(command.removePrefix("search the web for ").trim())
+            command.startsWith("google ") -> openWebSearch(command.removePrefix("google ").trim())
+            command.startsWith("look up ") -> openWebSearch(command.removePrefix("look up ").trim())
+            command.startsWith("find on maps ") -> openMaps(command.removePrefix("find on maps ").trim())
+            command.startsWith("search maps for ") -> openMaps(command.removePrefix("search maps for ").trim())
+            command.startsWith("navigate to ") -> openMaps(command.removePrefix("navigate to ").trim())
+            command.startsWith("directions to ") -> openMaps(command.removePrefix("directions to ").trim())
+            command.startsWith("create calendar event ") -> openCalendarEvent(command.removePrefix("create calendar event ").trim())
+            command.startsWith("add calendar event ") -> openCalendarEvent(command.removePrefix("add calendar event ").trim())
+            command == "compose email" || command == "open email" -> openComposer("email")
+            command == "open messages" || command == "compose message" || command == "open sms" -> openComposer("message")
+            command == "open phone" || command == "open dialer" -> openComposer("dialer")
             command.startsWith("set timer") || command.startsWith("start timer") -> setTimer(command)
                 ?: "Try saying: set a timer for 5 minutes."
             command.startsWith("set alarm") || command.startsWith("create alarm") -> setAlarm(command)

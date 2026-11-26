@@ -202,7 +202,7 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun setTimer(raw: String): String? {
-        val match = Regex("""(?:set|start)\\s+(?:a\\s+)?timer(?:\\s+for)?\\s+(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)""")
+        val match = Regex("""(?:set|start)\s+(?:a\s+)?timer(?:\s+for)?\s+(\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)""")
             .find(raw.lowercase(Locale.ROOT)) ?: return null
         val amount = match.groupValues[1].toLongOrNull() ?: return "That timer duration is not valid."
         val unit = match.groupValues[2]
@@ -226,7 +226,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun setAlarm(raw: String): String? {
-        val match = Regex("""(?:set|create)\\s+(?:an?\\s+)?alarm\\s+(?:for\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?""")
+        val match = Regex("""(?:set|create)\s+(?:an?\s+)?alarm\s+(?:for\s+)?(\d{1,2})(?::(\d{2}))?\s*(am|pm)?""")
             .find(raw.lowercase(Locale.ROOT)) ?: return null
         var hour = match.groupValues[1].toIntOrNull() ?: return "That alarm time is not valid."
         val minute = match.groupValues[2].ifBlank { "0" }.toIntOrNull() ?: return "That alarm time is not valid."

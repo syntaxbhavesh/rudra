@@ -85,15 +85,7 @@ class WakeWordListener(
         }, 500)
     }
 
-    private fun isWakePhrase(value: String): Boolean {
-        val normalized = value.lowercase(Locale.ROOT)
-            .replace(Regex("[^a-z0-9 ]"), " ")
-            .replace(Regex("\\s+"), " ")
-            .trim()
-        return normalized.contains("hey rudra") ||
-            normalized.contains("hey roodra") ||
-            normalized.contains("hey rudrah")
-    }
+    private fun isWakePhrase(value: String): Boolean = RudraCommandRules.isWakePhrase(value)
 
     private fun stopRecognizer() {
         recognizer?.let {

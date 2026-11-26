@@ -151,28 +151,66 @@ class MainActivity : ComponentActivity() {
         recognizer = null
     }
 
-    private fun launchApp(name: String): Boolean {
-        val intent = when (name.lowercase()) {
-            "youtube" -> packageManager.getLaunchIntentForPackage("com.google.android.youtube")
-            "whatsapp" -> packageManager.getLaunchIntentForPackage("com.whatsapp")
-            "chrome" -> packageManager.getLaunchIntentForPackage("com.android.chrome")
-            "settings" -> Intent(android.provider.Settings.ACTION_SETTINGS)
-            else -> null
+    private data class LaunchableApp(val label: String, val packageName: String)
+
+    private fun getLaunchableApps(): List<LaunchableApp> {
+        val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return packageManager.queryIntentActivities(launcherIntent, 0)
+            .mapNotNull { resolveInfo ->
+                val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
+                if (activityInfo.packageName == packageName) return@mapNotNull null
+                val label = resolveInfo.loadLabel(packageManager)?.toString()?.trim().orEmpty()
+                if (label.isBlank()) null else LaunchableApp(label, activityInfo.packageName)
+            }
+            .distinctBy { it.packageName }
+            .sortedBy { it.label.lowercase(Locale.ROOT) }
+    }
+
+    private fun normalizeAppName(value: String): String =
+        value.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+
+    private fun launchApp(name: String): String {
+        val target = normalizeAppName(name)
+        if (target.isBlank()) return "Tell me which app you want to open."
+        val apps = getLaunchableApps()
+        val exact = apps.filter { normalizeAppName(it.label) == target }
+        val matches = if (exact.isNotEmpty()) exact else apps.filter {
+            val label = normalizeAppName(it.label)
+            label.startsWith(target) || label.contains(target)
         }
-        if (intent == null) return false
-        return try { startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)); true } catch (_: Exception) { false }
+        if (matches.isEmpty()) return "I couldn't find an app named $name. Say “list apps” to see available apps."
+        if (matches.size > 1) {
+            return "I found multiple matches: ${matches.take(5).joinToString(", ") { it.label }}. Please say the full app name."
+        }
+        val app = matches.first()
+        val intent = packageManager.getLaunchIntentForPackage(app.packageName)
+            ?: return "${app.label} is installed, but Android did not provide a launch screen for it."
+        return try {
+            startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            "Opening ${app.label}."
+        } catch (_: Exception) {
+            "Android couldn't open ${app.label}."
+        }
     }
 
     private fun localCommand(raw: String): String? {
-        val command = raw.trim().lowercase(Locale.getDefault())
+        val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
+        val openPrefix = listOf("open ", "launch ", "start ").firstOrNull { command.startsWith(it) }
+        val requestedApp = openPrefix?.let { command.removePrefix(it).removePrefix("the ").removePrefix("app ").trim() }
         return when {
+            command == "list apps" || command == "show apps" || command == "what apps are installed" ->
+                getLaunchableApps().takeIf { it.isNotEmpty() }?.let { apps ->
+                    val visible = apps.take(30).joinToString(", ") { it.label }
+                    "I found ${apps.size} launchable apps. Here are ${minOf(apps.size, 30)}: $visible" +
+                        if (apps.size > 30) ". Ask for a specific app by name to open it." else "."
+                } ?: "I couldn't find any launchable apps."
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
             command == "help" || command == "what can you do" -> "I can answer questions using Shiva AI, speak replies, and open YouTube, WhatsApp, Chrome or Android Settings."
-            command.startsWith("open youtube") -> if (launchApp("youtube")) "Opening YouTube." else "YouTube could not be opened on this device."
-            command.startsWith("open whatsapp") -> if (launchApp("whatsapp")) "Opening WhatsApp." else "WhatsApp could not be opened on this device."
-            command.startsWith("open chrome") -> if (launchApp("chrome")) "Opening Chrome." else "Chrome could not be opened on this device."
-            command.startsWith("open settings") -> if (launchApp("settings")) "Opening Android Settings." else "Settings could not be opened."
+            command == "open settings" || command == "launch settings" || command == "start settings" ->
+                try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)); "Opening Android Settings." }
+                catch (_: Exception) { "Android Settings could not be opened." }
+            requestedApp != null -> launchApp(requestedApp)
             else -> null
         }
     }

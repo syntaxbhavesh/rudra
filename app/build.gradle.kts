@@ -11,8 +11,8 @@ android {
         applicationId = "com.syntaxbhavesh.rudra"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "0.3.0"
+        versionCode = 4
+        versionName = "1.0.0"
         buildConfigField("String", "SHIVA_API_BASE_URL", "\"$shivaApiBaseUrl\"")
     }
     buildFeatures { compose = true; buildConfig = true }

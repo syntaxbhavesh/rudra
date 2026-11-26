@@ -376,9 +376,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun notificationAccessEnabled(): Boolean =
-        android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty().contains(packageName)
-
     private fun localCommand(raw: String): String? {
         localMemoryCommand(raw)?.let { return it }
         val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
@@ -394,20 +391,7 @@ class MainActivity : ComponentActivity() {
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
             command == "help" || command == "what can you do" ->
-                "I can chat through Shiva AI, use voice input and spoken replies, open apps, set alarms/timers/reminders, search the web, open Maps and Calendar drafts, and save private notes on this device."
-            command == "open notification access" || command == "enable notification access" -> try {
-                startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
-                "Opening Android notification access. Enable RUDRA only if you want notifications read locally."
-            } catch (_: Exception) { "Notification access settings are unavailable." }
-            command == "notification access status" -> if (notificationAccessEnabled()) "Notification access is enabled." else "Notification access is off."
-            command == "read notifications" || command == "show notifications" -> if (notificationAccessEnabled()) {
-                val items = runCatching { JSONArray(getSharedPreferences("rudra_notifications", MODE_PRIVATE).getString("items", "[]") ?: "[]") }.getOrElse { JSONArray() }
-                if (items.length() == 0) "No recent notifications captured yet."
-                else (0 until minOf(items.length(), 8)).joinToString("\n") { i ->
-                    val item = items.getJSONObject(items.length() - 1 - i)
-                    "${item.optString("app")}: ${item.optString("title")} — ${item.optString("text")}".take(220)
-                }
-            } else "Notification access is off. Say “open notification access” to enable it in Android settings."
+                "I can chat through Shiva AI, use voice input and spoken replies, open apps, set alarms, timers and reminders, search the web, open Maps and Calendar drafts, and save private notes on this device."
             command in listOf("show reminders", "list reminders", "what are my reminders") -> {
                 val reminders = ReminderScheduler.pendingReminders(this)
                 if (reminders.isEmpty()) "You have no pending RUDRA reminders."
@@ -762,7 +746,7 @@ private fun RudraScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
                         QuickAction("Maps", Modifier.weight(1f)) { input = "find on maps " }
                         QuickAction("Memory", Modifier.weight(1f)) { input = "what do you remember" }
-                        QuickAction("Notifications", Modifier.weight(1f)) { input = "read notifications" }
+                        QuickAction("Calendar", Modifier.weight(1f)) { input = "create calendar event " }
                     }
                 }
             }

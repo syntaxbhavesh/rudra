@@ -71,6 +71,41 @@ object ReminderScheduler {
         prefs.edit().putString(ITEMS, kept.toString()).apply()
     }
 
+    fun pendingReminders(context: Context): List<String> {
+        val items = readItems(context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getString(ITEMS, "[]"))
+        return (0 until items.length()).mapNotNull { index ->
+            val item = items.optJSONObject(index) ?: return@mapNotNull null
+            val title = item.optString("title").takeIf { it.isNotBlank() } ?: return@mapNotNull null
+            val triggerAt = item.optLong("triggerAt", 0L)
+            if (triggerAt <= 0L) null else "$title — " +
+                java.text.SimpleDateFormat("EEE, h:mm a", java.util.Locale.getDefault()).format(java.util.Date(triggerAt))
+        }
+    }
+
+    fun cancelAll(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        val items = readItems(prefs.getString(ITEMS, "[]"))
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        var cancelled = 0
+        for (i in 0 until items.length()) {
+            val item = items.optJSONObject(i) ?: continue
+            val id = item.optString("id")
+            if (id.isBlank()) continue
+            val pending = PendingIntent.getBroadcast(
+                context, id.hashCode(),
+                Intent(context, ReminderReceiver::class.java),
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE
+            )
+            if (pending != null) {
+                alarmManager.cancel(pending)
+                pending.cancel()
+            }
+            cancelled++
+        }
+        prefs.edit().remove(ITEMS).apply()
+        return cancelled
+    }
+
     internal fun complete(context: Context, id: String) {
         if (id.isBlank()) return
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

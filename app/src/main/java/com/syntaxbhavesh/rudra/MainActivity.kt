@@ -316,7 +316,7 @@ class MainActivity : ComponentActivity() {
             .find(raw.lowercase(Locale.ROOT)) ?: return "Try: remind me in 10 minutes to drink water."
         val amount = match.groupValues[1].toLongOrNull() ?: return "That reminder duration is invalid."
         val unit = match.groupValues[2]
-        val title = match.groupValues[3].trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it }
+        val title = match.groupValues[3].trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() }
         if (title.isBlank()) return "Tell me what you want to be reminded about."
         val multiplier = when {
             unit.startsWith("hour") || unit.startsWith("hr") -> 3600L

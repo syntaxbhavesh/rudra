@@ -59,6 +59,7 @@ data class ChatMessage(val id: String = UUID.randomUUID().toString(), val role: 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
     private var recognizer: SpeechRecognizer? = null
+    private var wakeWordListener: WakeWordListener? = null
     private val mainHandler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,6 +70,8 @@ class MainActivity : ComponentActivity() {
                 RudraScreen(
                     onSpeak = { speak(it) },
                     onListen = { success, failure -> listen(success, failure) },
+                    onWakeWordStart = { onWake, onState -> startWakeWord(onWake, onState) },
+                    onStopListening = { stopAllListening() },
                     initialMessages = loadChatHistory(),
                     onSaveMessages = { saveChatHistory(it) },
                     onLocalCommand = { localCommand(it) },
@@ -134,6 +137,18 @@ class MainActivity : ComponentActivity() {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, false)
             })
         }
+    }
+
+    private fun startWakeWord(onWake: () -> Unit, onState: (String) -> Unit) {
+        stopAllListening()
+        wakeWordListener = WakeWordListener(this, onWake, onState).also { it.start() }
+    }
+
+    private fun stopAllListening() {
+        wakeWordListener?.stop()
+        wakeWordListener = null
+        recognizer?.let { runCatching { it.cancel() }; runCatching { it.destroy() } }
+        recognizer = null
     }
 
     private fun launchApp(name: String): Boolean {
@@ -230,7 +245,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
-        recognizer?.destroy()
+        stopAllListening()
         tts?.stop()
         tts?.shutdown()
         super.onDestroy()
@@ -241,6 +256,8 @@ class MainActivity : ComponentActivity() {
 private fun RudraScreen(
     onSpeak: (String) -> Unit,
     onListen: ((String) -> Unit, (String) -> Unit) -> Unit,
+    onWakeWordStart: (() -> Unit, (String) -> Unit) -> Unit,
+    onStopListening: () -> Unit,
     initialMessages: List<ChatMessage>,
     onSaveMessages: (List<ChatMessage>) -> Unit,
     onLocalCommand: (String) -> String?,
@@ -251,10 +268,31 @@ private fun RudraScreen(
     var showClearDialog by remember { mutableStateOf(false) }
     var status by remember { mutableStateOf("SHIVA AI CONNECTED") }
     var sending by remember { mutableStateOf(false) }
+    var wakeEnabled by remember { mutableStateOf(false) }
+    var listeningStatus by remember { mutableStateOf("Wake word off") }
+    var pendingWakeEnable by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
+            if (pendingWakeEnable) {
+                pendingWakeEnable = false
+                wakeEnabled = true
+                onWakeWordStart({
+                    wakeEnabled = false
+                    listeningStatus = "Wake word detected — speak now"
+                    onListen({ spoken ->
+                        status = "PROCESSING"
+                        submitMessage(spoken, messages, onLocalCommand, onAskShiva, onSpeak,
+                            { messages = it }, { sending = it }, { status = it })
+                    }, { error ->
+                        messages = messages + ChatMessage(role = "assistant", text = error)
+                        listeningStatus = "Wake word on — waiting"
+                        if (wakeEnabled) onWakeWordStart({}, { listeningStatus = it })
+                    })
+                }, { listeningStatus = it })
+                return@RequestPermission
+            }
             status = "LISTENING"
             onListen({ spoken ->
                 status = "PROCESSING"
@@ -262,6 +300,9 @@ private fun RudraScreen(
                     { messages = it }, { sending = it }, { status = it })
             }, { messages = messages + ChatMessage(role = "assistant", text = it); status = "SHIVA AI CONNECTED" })
         } else {
+            pendingWakeEnable = false
+            wakeEnabled = false
+            listeningStatus = "Microphone permission denied"
             messages = messages + ChatMessage(role = "assistant", text = "Microphone permission is needed for voice input. You can still type messages.")
         }
     }
@@ -316,6 +357,41 @@ private fun RudraScreen(
             }
             Spacer(Modifier.height(10.dp))
 
+            Surface(
+                color = if (wakeEnabled) Color(0xFF183B35) else Color(0xFF13243A),
+                shape = RoundedCornerShape(14.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (wakeEnabled) Color(0xFF43D9A3) else Color(0xFF34516F)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(Modifier.size(9.dp).background(if (wakeEnabled) Color(0xFF43D9A3) else Color(0xFF7890AA), CircleShape))
+                    Spacer(Modifier.width(9.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(if (wakeEnabled) "MICROPHONE ACTIVE" else "WAKE WORD DISABLED",
+                            color = if (wakeEnabled) Color(0xFF7CF0C1) else Color(0xFFB7C7D9),
+                            fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        Text(listeningStatus, color = Color(0xFFB7C7D9), fontSize = 9.sp)
+                    }
+                    Switch(checked = wakeEnabled, onCheckedChange = { enabled ->
+                        if (enabled && !sending) {
+                            pendingWakeEnable = true
+                            permission.launch(Manifest.permission.RECORD_AUDIO)
+                        } else if (!enabled) {
+                            pendingWakeEnable = false
+                            wakeEnabled = false
+                            listeningStatus = "Wake word off"
+                            onStopListening()
+                        }
+                    })
+                }
+            }
+            Text("Only active while RUDRA is on screen. Audio may be processed by your device’s configured speech-recognition provider.",
+                color = Color(0xFF8199B5), fontSize = 9.sp, lineHeight = 13.sp,
+                modifier = Modifier.padding(top = 5.dp, bottom = 5.dp))
+
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
@@ -348,7 +424,7 @@ private fun RudraScreen(
 
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 IconButton(
-                    onClick = { if (!sending) permission.launch(Manifest.permission.RECORD_AUDIO) },
+                    onClick = { if (!sending) { wakeEnabled = false; pendingWakeEnable = false; onStopListening(); permission.launch(Manifest.permission.RECORD_AUDIO) } },
                     enabled = !sending,
                     modifier = Modifier.size(50.dp).background(Color(0xFF123D62), CircleShape).border(1.dp, cyan.copy(alpha = .6f), CircleShape)
                 ) {

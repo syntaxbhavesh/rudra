@@ -338,7 +338,40 @@ class MainActivity : ComponentActivity() {
         }.getOrElse { "I couldn't schedule that reminder: ${it.message ?: "unknown error"}" }
     }
 
+    private fun localMemoryCommand(raw: String): String? {
+        val text = raw.trim()
+        val normalized = text.lowercase(Locale.ROOT)
+        val prefs = getSharedPreferences("rudra_memory", MODE_PRIVATE)
+        return when {
+            normalized.startsWith("remember that ") || normalized.startsWith("remember ") -> {
+                val note = text.substringAfter("remember").trim().removePrefix("that ").trim()
+                if (note.isBlank()) "Tell me what to remember."
+                else {
+                    val notes = JSONArray(prefs.getString("notes", "[]") ?: "[]")
+                    notes.put(note.take(400))
+                    while (notes.length() > 30) notes.remove(0)
+                    prefs.edit().putString("notes", notes.toString()).apply()
+                    "Saved to RUDRA's on-device memory."
+                }
+            }
+            normalized in listOf("what do you remember", "show my memory", "read my notes") -> {
+                val notes = JSONArray(prefs.getString("notes", "[]") ?: "[]")
+                if (notes.length() == 0) "Your RUDRA memory is empty."
+                else (0 until notes.length()).joinToString("\\n") { notes.optString(it) }
+            }
+            normalized in listOf("forget my notes", "clear my memory") -> {
+                prefs.edit().remove("notes").apply()
+                "Your locally saved RUDRA notes have been cleared."
+            }
+            else -> null
+        }
+    }
+
+    private fun notificationAccessEnabled(): Boolean =
+        android.provider.Settings.Secure.getString(contentResolver, "enabled_notification_listeners").orEmpty().contains(packageName)
+
     private fun localCommand(raw: String): String? {
+        localMemoryCommand(raw)?.let { return it }
         val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
         val openPrefix = listOf("open ", "launch ", "start ").firstOrNull { command.startsWith(it) }
         val requestedApp = openPrefix?.let { command.removePrefix(it).removePrefix("the ").removePrefix("app ").trim() }
@@ -352,7 +385,24 @@ class MainActivity : ComponentActivity() {
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
             command == "help" || command == "what can you do" ->
-                "I can answer with Shiva AI, speak replies, open installed apps, list apps, set alarms, timers and reminders, open system settings, search the web, find places in Maps, create calendar events, and open email, messaging or phone composers."
+                "I can chat through Shiva AI, use voice input and spoken replies, open apps, set alarms/timers/reminders, search the web, open Maps and Calendar drafts, and save private notes on this device."
+            command == "open notification access" || command == "enable notification access" -> try {
+                startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                "Opening Android notification access. Enable RUDRA only if you want notifications read locally."
+            } catch (_: Exception) { "Notification access settings are unavailable." }
+            command == "notification access status" -> if (notificationAccessEnabled()) "Notification access is enabled." else "Notification access is off."
+            command == "read notifications" || command == "show notifications" -> if (notificationAccessEnabled()) {
+                val items = runCatching { JSONArray(getSharedPreferences("rudra_notifications", MODE_PRIVATE).getString("items", "[]") ?: "[]") }.getOrElse { JSONArray() }
+                if (items.length() == 0) "No recent notifications captured yet."
+                else (0 until minOf(items.length(), 8)).joinToString("\\n") { i ->
+                    val item = items.getJSONObject(items.length() - 1 - i)
+                    "${item.optString("app")}: ${item.optString("title")} — ${item.optString("text")}".take(220)
+                }
+            } else "Notification access is off. Say “open notification access” to enable it in Android settings."
+            command == "clear notification history" -> {
+                getSharedPreferences("rudra_notifications", MODE_PRIVATE).edit().remove("items").apply()
+                "Local notification history cleared."
+            }
             command.startsWith("search web for ") -> openWebSearch(command.removePrefix("search web for ").trim())
             command.startsWith("search the web for ") -> openWebSearch(command.removePrefix("search the web for ").trim())
             command.startsWith("google ") -> openWebSearch(command.removePrefix("google ").trim())

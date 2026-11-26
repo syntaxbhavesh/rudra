@@ -366,7 +366,7 @@ class MainActivity : ComponentActivity() {
             normalized in listOf("what do you remember", "show my memory", "read my notes") -> {
                 val notes = JSONArray(prefs.getString("notes", "[]") ?: "[]")
                 if (notes.length() == 0) "Your RUDRA memory is empty."
-                else (0 until notes.length()).joinToString("\\n") { notes.optString(it) }
+                else (0 until notes.length()).joinToString("\n") { notes.optString(it) }
             }
             normalized in listOf("forget my notes", "clear my memory") -> {
                 prefs.edit().remove("notes").apply()
@@ -403,7 +403,7 @@ class MainActivity : ComponentActivity() {
             command == "read notifications" || command == "show notifications" -> if (notificationAccessEnabled()) {
                 val items = runCatching { JSONArray(getSharedPreferences("rudra_notifications", MODE_PRIVATE).getString("items", "[]") ?: "[]") }.getOrElse { JSONArray() }
                 if (items.length() == 0) "No recent notifications captured yet."
-                else (0 until minOf(items.length(), 8)).joinToString("\\n") { i ->
+                else (0 until minOf(items.length(), 8)).joinToString("\n") { i ->
                     val item = items.getJSONObject(items.length() - 1 - i)
                     "${item.optString("app")}: ${item.optString("title")} — ${item.optString("text")}".take(220)
                 }
@@ -411,7 +411,7 @@ class MainActivity : ComponentActivity() {
             command in listOf("show reminders", "list reminders", "what are my reminders") -> {
                 val reminders = ReminderScheduler.pendingReminders(this)
                 if (reminders.isEmpty()) "You have no pending RUDRA reminders."
-                else "Pending reminders:\\n" + reminders.joinToString("\\n") { "• $it" }
+                else "Pending reminders:\n" + reminders.joinToString("\n") { "• $it" }
             }
             command in listOf("cancel all reminders", "clear reminders") -> {
                 val count = ReminderScheduler.cancelAll(this)

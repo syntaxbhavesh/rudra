@@ -472,7 +472,7 @@ class MainActivity : ComponentActivity() {
                                 val count = input.read(buffer)
                                 if (count < 0) break
                                 total += count
-                                if (total > 4 * 1024 * 1024) throw IllegalArgumentException("Image is larger than 4 MB. Choose a smaller image.")
+                                if (total > 3 * 1024 * 1024) throw IllegalArgumentException("Image is larger than 3 MB. Choose a smaller image.")
                                 output.write(buffer, 0, count)
                             }
                             output.toByteArray()

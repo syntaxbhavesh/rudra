@@ -10,7 +10,7 @@ RUDRA is an independent Android assistant. Its app and repository remain separat
 - Spoken-reply, quick-command visibility and memory-sharing preferences persist locally between launches
 - Attach an image from the device picker and send it to Shiva AI for analysis (requires Gemini configured on the Shiva backend)
 - Optional explicit sharing of saved on-device notes as study context to Shiva AI
-- Reminders are persisted locally and restored after a device reboot
+- Reminders are persisted locally, restored after a device reboot, and can be listed or cancelled with voice commands
 - Dynamic installed-app discovery and launching
 - Android handoffs for alarms, timers, reminders, Wi-Fi/Bluetooth/display/sound settings, web search, Maps, Calendar drafts, email, messages and dialer
 - Local chat history and on-device notes: “remember that …”, “what do you remember?”, “forget my notes”

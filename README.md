@@ -9,6 +9,8 @@ RUDRA is an independent Android assistant. Its Android app, UI, settings and rep
 - Spoken AI answers with Android Text-to-Speech
 - Typed chat with conversation context sent to Shiva
 - Streamed Shiva AI responses displayed in the chat
+- On-device chat history persistence (up to 200 non-empty messages)
+- Clear conversation control with confirmation
 - Local commands for time/date and opening YouTube, WhatsApp, Chrome or Android Settings
 - GitHub Actions debug APK workflow
 
@@ -32,4 +34,4 @@ Use JDK 17 and Android SDK 35. Open in Android Studio and sync Gradle, or use th
 2. Add optional on-device wake-word activation with a visible foreground-service microphone indicator and explicit controls.
 3. Add persistent local conversation history and user-controlled integrations.
 
-RUDRA does not secretly monitor the microphone. The initial voice mode is tap-to-talk.
+Chat messages are stored locally on the device using Android app preferences. Clearing app data or uninstalling RUDRA removes this local history. RUDRA does not secretly monitor the microphone. The initial voice mode is tap-to-talk.

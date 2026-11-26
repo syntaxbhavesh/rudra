@@ -244,6 +244,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onStop() {
+        stopAllListening()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         stopAllListening()
         tts?.stop()
@@ -291,14 +296,14 @@ private fun RudraScreen(
                         if (wakeEnabled) onWakeWordStart({}, { listeningStatus = it })
                     })
                 }, { listeningStatus = it })
-                return@RequestPermission
-            }
+            } else {
             status = "LISTENING"
             onListen({ spoken ->
                 status = "PROCESSING"
                 submitMessage(spoken, messages, onLocalCommand, onAskShiva, onSpeak,
                     { messages = it }, { sending = it }, { status = it })
             }, { messages = messages + ChatMessage(role = "assistant", text = it); status = "SHIVA AI CONNECTED" })
+            }
         } else {
             pendingWakeEnable = false
             wakeEnabled = false

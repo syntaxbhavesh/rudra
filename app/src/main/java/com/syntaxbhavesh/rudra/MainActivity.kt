@@ -65,6 +65,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         tts = TextToSpeech(this) { result -> if (result == TextToSpeech.SUCCESS) tts?.language = Locale.getDefault() }
+        ReminderScheduler.createChannel(this)
         setContent {
             MaterialTheme(colorScheme = darkColorScheme(primary = cyan, background = night, surface = panel)) {
                 RudraScreen(
@@ -310,6 +311,32 @@ class MainActivity : ComponentActivity() {
             "The requested app wasn't available."
         }
 
+    private fun scheduleReminder(raw: String): String {
+        val match = Regex("""remind me in (\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\\s+to\\s+(.+)""")
+            .find(raw.lowercase(Locale.ROOT)) ?: return "Try: remind me in 10 minutes to drink water."
+        val amount = match.groupValues[1].toLongOrNull() ?: return "That reminder duration is invalid."
+        val unit = match.groupValues[2]
+        val title = match.groupValues[3].trim().replaceFirstChar { if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it }
+        if (title.isBlank()) return "Tell me what you want to be reminded about."
+        val multiplier = when {
+            unit.startsWith("hour") || unit.startsWith("hr") -> 3600L
+            unit.startsWith("min") -> 60L
+            else -> 1L
+        }
+        val delaySeconds = amount * multiplier
+        if (delaySeconds !in 10..604800) return "Choose a reminder between 10 seconds and 7 days."
+        if (android.os.Build.VERSION.SDK_INT >= 33 &&
+            checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) {
+            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 4102)
+            return "Please allow RUDRA notifications, then repeat your reminder command."
+        }
+        return runCatching {
+            ReminderScheduler.schedule(this, title, delaySeconds)
+            "Reminder set for $amount $unit from now: $title."
+        }.getOrElse { "I couldn't schedule that reminder: ${it.message ?: "unknown error"}" }
+    }
+
     private fun localCommand(raw: String): String? {
         val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
         val openPrefix = listOf("open ", "launch ", "start ").firstOrNull { command.startsWith(it) }
@@ -324,7 +351,7 @@ class MainActivity : ComponentActivity() {
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
             command == "help" || command == "what can you do" ->
-                "I can answer with Shiva AI, speak replies, open installed apps, list apps, set alarms and timers, open system settings, search the web, find places in Maps, create calendar events, and open email, messaging or phone composers."
+                "I can answer with Shiva AI, speak replies, open installed apps, list apps, set alarms, timers and reminders, open system settings, search the web, find places in Maps, create calendar events, and open email, messaging or phone composers."
             command.startsWith("search web for ") -> openWebSearch(command.removePrefix("search web for ").trim())
             command.startsWith("search the web for ") -> openWebSearch(command.removePrefix("search the web for ").trim())
             command.startsWith("google ") -> openWebSearch(command.removePrefix("google ").trim())
@@ -338,6 +365,7 @@ class MainActivity : ComponentActivity() {
             command == "compose email" || command == "open email" -> openComposer("email")
             command == "open messages" || command == "compose message" || command == "open sms" -> openComposer("message")
             command == "open phone" || command == "open dialer" -> openComposer("dialer")
+            command.startsWith("remind me in ") -> scheduleReminder(command)
             command.startsWith("set timer") || command.startsWith("start timer") -> setTimer(command)
                 ?: "Try saying: set a timer for 5 minutes."
             command.startsWith("set alarm") || command.startsWith("create alarm") -> setAlarm(command)

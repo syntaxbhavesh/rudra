@@ -1,23 +1,35 @@
 # RUDRA
 **Responsive Utility, Dialogue & Robotic Assistant**
 
-An independent Android assistant project. This repository is separate from Shiva AI. Shiva may be used only as an optional AI service through a secure backend API.
+RUDRA is an independent Android assistant. Its Android app, UI, settings and repository are separate from Shiva AI. Shiva is used as an AI service through its existing HTTPS API.
 
-## Starter features
-- JARVIS-inspired dark Android interface (Jetpack Compose)
+## Current features
+- JARVIS-inspired dark chat interface
 - Tap-to-talk speech recognition
-- Spoken replies using Android Text-to-Speech
-- Local commands to open YouTube, WhatsApp, Chrome and Android Settings
-- GitHub Actions workflow to build a debug APK
+- Spoken AI answers with Android Text-to-Speech
+- Typed chat with conversation context sent to Shiva
+- Streamed Shiva AI responses displayed in the chat
+- Local commands for time/date and opening YouTube, WhatsApp, Chrome or Android Settings
+- GitHub Actions debug APK workflow
+
+## Shiva AI integration
+The Android app sends conversation messages to:
+`POST https://shiva-bookstore.vercel.app/api/chat`
+
+The inspected Shiva endpoint accepts AI SDK UI messages with `role` and text `parts`, and responds as a text-delta event stream. RUDRA reads that stream and displays the accumulated answer. The same final answer is spoken using Android Text-to-Speech.
+
+The deployed server controls its own Groq, Gemini and Cloudflare provider credentials. No provider API key is embedded in this Android app. The base URL can be overridden at build time with:
+`-PSHIVA_API_BASE_URL=https://your-shiva-domain.example`
+
+## Important backend note
+The inspected `/api/chat` handler currently validates message structure but does not require a BOOKStore ID token. This app therefore does not pretend to provide BOOKStore sign-in or per-user identity. Do not add private credentials to this repository or APK. Consider adding server-side rate limiting and authentication to the Shiva endpoint before wider public distribution.
 
 ## Build
-Open this repository in Android Studio with JDK 17 and Android SDK 35, sync Gradle, then run the app. Or run `gradle assembleDebug` in a compatible Android build environment.
+Use JDK 17 and Android SDK 35. Open in Android Studio and sync Gradle, or use the repository's GitHub Actions workflow to build a debug APK.
 
 ## Roadmap
-1. Complete and test voice-first Android app.
-2. Add a secure RUDRA-to-Shiva API adapter after confirming the deployed API contract.
-3. Add optional wake-word activation using an on-device engine and an Android foreground service with clear microphone controls.
-4. Add more user-approved Android intents and integrations.
+1. Verify the AI connection and build on a physical Android device.
+2. Add optional on-device wake-word activation with a visible foreground-service microphone indicator and explicit controls.
+3. Add persistent local conversation history and user-controlled integrations.
 
-## Safety and privacy
-RUDRA does not secretly monitor the microphone. Tap-to-talk is the initial voice mode. Wake-word mode requires explicit setup, visible microphone status, and Android permissions. Do not put private API keys in the APK or repository.
+RUDRA does not secretly monitor the microphone. The initial voice mode is tap-to-talk.

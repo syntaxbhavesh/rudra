@@ -1,5 +1,5 @@
 # RUDRA
-**Responsive Utility, Dialogue & Robotic Assistant**
+**Responsive Utility, Dialogue & Robotic Assistant**\n\nCurrent app version: **0.3.0**
 
 RUDRA is an independent Android assistant. Its Android app, UI, settings and repository are separate from Shiva AI. Shiva is used as an AI service through its existing HTTPS API.
 
@@ -12,7 +12,7 @@ RUDRA is an independent Android assistant. Its Android app, UI, settings and rep
 - Streamed Shiva AI responses displayed in the chat
 - On-device chat history persistence (up to 200 non-empty messages)
 - Clear conversation control with confirmation
-- Local commands for time/date, listing and opening installed apps by displayed name, opening Wi-Fi/Bluetooth/display/sound settings, and handing alarm/timer setup to the Android Clock app for confirmation
+- Local commands for time/date, listing and opening installed apps by displayed name, opening Wi-Fi/Bluetooth/display/sound settings, handing alarm/timer setup to Android Clock, opening web searches in the browser, searching destinations in Maps, creating calendar-event drafts, and opening email/message/phone composers
 - GitHub Actions debug APK workflow
 
 ## Shiva AI integration

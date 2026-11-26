@@ -193,6 +193,65 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun openSystemPanel(action: String, label: String): String =
+        try {
+            startActivity(Intent(action))
+            "Opening $label settings."
+        } catch (_: Exception) {
+            "Android couldn't open $label settings on this device."
+        }
+
+    private fun setTimer(raw: String): String? {
+        val match = Regex("""(?:set|start)\\s+(?:a\\s+)?timer(?:\\s+for)?\\s+(\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)""")
+            .find(raw.lowercase(Locale.ROOT)) ?: return null
+        val amount = match.groupValues[1].toLongOrNull() ?: return "That timer duration is not valid."
+        val unit = match.groupValues[2]
+        val multiplier = when {
+            unit.startsWith("hour") || unit.startsWith("hr") -> 3600L
+            unit.startsWith("min") -> 60L
+            else -> 1L
+        }
+        val seconds = amount * multiplier
+        if (seconds !in 1..86400) return "Please choose a timer between 1 second and 24 hours."
+        return try {
+            startActivity(Intent(android.provider.AlarmClock.ACTION_SET_TIMER).apply {
+                putExtra(android.provider.AlarmClock.EXTRA_LENGTH, seconds.toInt())
+                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "RUDRA timer")
+                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+            })
+            "Opening the Clock app to set a timer for $amount $unit."
+        } catch (_: Exception) {
+            "A Clock app that supports timers wasn't available."
+        }
+    }
+
+    private fun setAlarm(raw: String): String? {
+        val match = Regex("""(?:set|create)\\s+(?:an?\\s+)?alarm\\s+(?:for\\s+)?(\\d{1,2})(?::(\\d{2}))?\\s*(am|pm)?""")
+            .find(raw.lowercase(Locale.ROOT)) ?: return null
+        var hour = match.groupValues[1].toIntOrNull() ?: return "That alarm time is not valid."
+        val minute = match.groupValues[2].ifBlank { "0" }.toIntOrNull() ?: return "That alarm time is not valid."
+        val meridiem = match.groupValues[3]
+        if (minute !in 0..59) return "Please provide alarm minutes between 00 and 59."
+        if (meridiem.isNotBlank()) {
+            if (hour !in 1..12) return "For AM or PM, use an hour from 1 to 12."
+            if (meridiem == "am") hour = if (hour == 12) 0 else hour
+            else hour = if (hour == 12) 12 else hour + 12
+        } else if (hour !in 0..23) {
+            return "Use a 24-hour time, or specify AM or PM."
+        }
+        return try {
+            startActivity(Intent(android.provider.AlarmClock.ACTION_SET_ALARM).apply {
+                putExtra(android.provider.AlarmClock.EXTRA_HOUR, hour)
+                putExtra(android.provider.AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, "RUDRA alarm")
+                putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, false)
+            })
+            "Opening the Clock app to review your alarm for ${String.format(Locale.ROOT, "%02d:%02d", hour, minute)}. Confirm it in the Clock app."
+        } catch (_: Exception) {
+            "A Clock app that supports alarms wasn't available."
+        }
+    }
+
     private fun localCommand(raw: String): String? {
         val command = raw.trim().lowercase(Locale.getDefault()).removePrefix("please ").trim()
         val openPrefix = listOf("open ", "launch ", "start ").firstOrNull { command.startsWith(it) }
@@ -206,10 +265,21 @@ class MainActivity : ComponentActivity() {
                 } ?: "I couldn't find any launchable apps."
             command == "time" || command.contains("what time is it") -> "The time is ${SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())}."
             command == "date" || command.contains("what is the date") -> "Today is ${SimpleDateFormat("EEEE, d MMMM yyyy", Locale.getDefault()).format(Date())}."
-            command == "help" || command == "what can you do" -> "I can answer questions using Shiva AI, speak replies, and open YouTube, WhatsApp, Chrome or Android Settings."
+            command == "help" || command == "what can you do" -> "I can answer questions using Shiva AI, speak replies, open installed apps, list apps, set alarms and timers through your Clock app, and open Android settings panels."
+            command.startsWith("set timer") || command.startsWith("start timer") -> setTimer(command)
+                ?: "Try saying: set a timer for 5 minutes."
+            command.startsWith("set alarm") || command.startsWith("create alarm") -> setAlarm(command)
+                ?: "Try saying: set an alarm for 7:30 AM."
             command == "open settings" || command == "launch settings" || command == "start settings" ->
-                try { startActivity(Intent(android.provider.Settings.ACTION_SETTINGS)); "Opening Android Settings." }
-                catch (_: Exception) { "Android Settings could not be opened." }
+                openSystemPanel(android.provider.Settings.ACTION_SETTINGS, "Android")
+            command in listOf("open wi-fi settings", "open wifi settings", "open wi-fi", "open wifi", "open network settings") ->
+                openSystemPanel(android.provider.Settings.ACTION_WIFI_SETTINGS, "Wi-Fi")
+            command in listOf("open bluetooth settings", "open bluetooth") ->
+                openSystemPanel(android.provider.Settings.ACTION_BLUETOOTH_SETTINGS, "Bluetooth")
+            command in listOf("open display settings", "open display") ->
+                openSystemPanel(android.provider.Settings.ACTION_DISPLAY_SETTINGS, "Display")
+            command in listOf("open sound settings", "open sound") ->
+                openSystemPanel(android.provider.Settings.ACTION_SOUND_SETTINGS, "Sound")
             requestedApp != null -> launchApp(requestedApp)
             else -> null
         }

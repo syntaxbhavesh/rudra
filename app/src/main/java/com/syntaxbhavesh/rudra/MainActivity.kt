@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -325,9 +326,8 @@ class MainActivity : ComponentActivity() {
             unit.startsWith("min") -> 60L
             else -> 1L
         }
-        if (amount > 604800L / multiplier) return "Choose a reminder between 10 seconds and 7 days."
-        val delaySeconds = amount * multiplier
-        if (delaySeconds !in 10..604800) return "Choose a reminder between 10 seconds and 7 days."
+        val delaySeconds = RudraCommandRules.reminderDelaySeconds(amount, unit)
+            ?: return "Choose a reminder between 10 seconds and 7 days."
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
         ) {
@@ -537,8 +537,10 @@ private fun RudraScreen(
     var wakeEnabled by remember { mutableStateOf(false) }
     var listeningStatus by remember { mutableStateOf("Wake word off") }
     var pendingWakeEnable by remember { mutableStateOf(false) }
-    var voiceReplies by remember { mutableStateOf(true) }
-    var quickActionsVisible by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    val uiPreferences = remember { context.getSharedPreferences("rudra_ui", android.content.Context.MODE_PRIVATE) }
+    var voiceReplies by remember { mutableStateOf(uiPreferences.getBoolean("voice_replies", true)) }
+    var quickActionsVisible by remember { mutableStateOf(uiPreferences.getBoolean("quick_actions_visible", true)) }
     val listState = rememberLazyListState()
     val orbPulse by rememberInfiniteTransition(label = "rudra-orb").animateFloat(
         initialValue = 0.96f, targetValue = 1.04f,
@@ -685,7 +687,10 @@ private fun RudraScreen(
 
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                 Text("QUICK COMMANDS", color = Color(0xFF9CB6D4), fontSize = 9.sp, letterSpacing = 1.5.sp)
-                TextButton(onClick = { quickActionsVisible = !quickActionsVisible }) {
+                TextButton(onClick = {
+                    quickActionsVisible = !quickActionsVisible
+                    uiPreferences.edit().putBoolean("quick_actions_visible", quickActionsVisible).apply()
+                }) {
                     Text(if (quickActionsVisible) "HIDE" else "SHOW", color = cyan, fontSize = 9.sp)
                 }
             }
@@ -705,7 +710,10 @@ private fun RudraScreen(
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
                 Text("SPOKEN REPLIES", color = Color(0xFF9CB6D4), fontSize = 8.sp)
-                Switch(checked = voiceReplies, onCheckedChange = { voiceReplies = it }, modifier = Modifier.height(30.dp))
+                Switch(checked = voiceReplies, onCheckedChange = {
+                    voiceReplies = it
+                    uiPreferences.edit().putBoolean("voice_replies", it).apply()
+                }, modifier = Modifier.height(30.dp))
             }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),

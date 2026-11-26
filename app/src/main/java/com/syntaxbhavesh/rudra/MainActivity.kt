@@ -13,6 +13,8 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.*
+import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -535,7 +537,14 @@ private fun RudraScreen(
     var wakeEnabled by remember { mutableStateOf(false) }
     var listeningStatus by remember { mutableStateOf("Wake word off") }
     var pendingWakeEnable by remember { mutableStateOf(false) }
+    var voiceReplies by remember { mutableStateOf(true) }
+    var quickActionsVisible by remember { mutableStateOf(true) }
     val listState = rememberLazyListState()
+    val orbPulse by rememberInfiniteTransition(label = "rudra-orb").animateFloat(
+        initialValue = 0.96f, targetValue = 1.04f,
+        animationSpec = infiniteRepeatable(tween(1100, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+        label = "orb-pulse"
+    )
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) {
@@ -546,7 +555,7 @@ private fun RudraScreen(
                     listeningStatus = "Wake word detected — speak now"
                     onListen({ spoken ->
                         status = "PROCESSING"
-                        submitMessage(spoken, messages, onLocalCommand, onAskShiva, onSpeak,
+                        submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
                             { messages = it }, { sending = it }, { status = it })
                         if (wakeEnabled) onWakeWordStart({}, { listeningStatus = it })
                     }, { error ->
@@ -613,7 +622,25 @@ private fun RudraScreen(
                     }
                 }
             }
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                color = Color(0xFF0D2844), shape = RoundedCornerShape(18.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, cyan.copy(alpha = .25f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 9.dp)) {
+                    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(84.dp)) {
+                        Box(Modifier.size(80.dp).scale(orbPulse).border(1.dp, cyan.copy(alpha = .3f), CircleShape))
+                        Box(Modifier.size(64.dp).border(1.dp, cyan.copy(alpha = .6f), CircleShape)
+                            .background(Brush.radialGradient(listOf(Color(0xFF245B82), Color(0xFF071525))), CircleShape))
+                        Text("R", color = cyan, fontSize = 34.sp, fontWeight = FontWeight.Light)
+                    }
+                    Text(if (sending) "PROCESSING REQUEST" else if (wakeEnabled) "VOICE CHANNEL ACTIVE" else "RUDRA READY",
+                        color = cyan, fontSize = 10.sp, letterSpacing = 2.sp, fontWeight = FontWeight.Bold)
+                    Text("SHIVA AI • LOCAL SYSTEM ACTIONS", color = Color(0xFF8FAAC7), fontSize = 8.sp)
+                }
+            }
+            Spacer(Modifier.height(7.dp))
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center, verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(8.dp).background(if (sending) Color(0xFFFFC857) else cyan, CircleShape))
                 Spacer(Modifier.width(8.dp))
@@ -656,6 +683,30 @@ private fun RudraScreen(
                 color = Color(0xFF8199B5), fontSize = 9.sp, lineHeight = 13.sp,
                 modifier = Modifier.padding(top = 5.dp, bottom = 5.dp))
 
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                Text("QUICK COMMANDS", color = Color(0xFF9CB6D4), fontSize = 9.sp, letterSpacing = 1.5.sp)
+                TextButton(onClick = { quickActionsVisible = !quickActionsVisible }) {
+                    Text(if (quickActionsVisible) "HIDE" else "SHOW", color = cyan, fontSize = 9.sp)
+                }
+            }
+            if (quickActionsVisible) {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+                        QuickAction("Apps", Modifier.weight(1f)) { input = "list apps" }
+                        QuickAction("Reminder", Modifier.weight(1f)) { input = "remind me in 10 minutes to " }
+                        QuickAction("Web search", Modifier.weight(1f)) { input = "search web for " }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp), modifier = Modifier.fillMaxWidth()) {
+                        QuickAction("Maps", Modifier.weight(1f)) { input = "find on maps " }
+                        QuickAction("Memory", Modifier.weight(1f)) { input = "what do you remember" }
+                        QuickAction("Notifications", Modifier.weight(1f)) { input = "read notifications" }
+                    }
+                }
+            }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Text("SPOKEN REPLIES", color = Color(0xFF9CB6D4), fontSize = 8.sp)
+                Switch(checked = voiceReplies, onCheckedChange = { voiceReplies = it }, modifier = Modifier.height(30.dp))
+            }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
@@ -706,7 +757,7 @@ private fun RudraScreen(
                         val text = input.trim()
                         if (text.isNotEmpty() && !sending) {
                             input = ""
-                            submitMessage(text, messages, onLocalCommand, onAskShiva, onSpeak,
+                            submitMessage(text, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
                                 { messages = it }, { sending = it }, { status = it })
                         }
                     }),
@@ -731,6 +782,18 @@ private fun RudraScreen(
             Spacer(Modifier.height(5.dp))
             Text("VOICE + CHAT • POWERED BY SHIVA AI", color = Color(0xFF8DA7C5), fontSize = 8.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         }
+    }
+}
+
+@Composable
+private fun QuickAction(label: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    OutlinedButton(
+        onClick = onClick, modifier = modifier.height(34.dp),
+        contentPadding = PaddingValues(horizontal = 3.dp, vertical = 0.dp),
+        shape = RoundedCornerShape(9.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF34516F))
+    ) {
+        Text(label, color = Color(0xFFBDEBFF), fontSize = 9.sp, textAlign = TextAlign.Center)
     }
 }
 

@@ -312,7 +312,7 @@ class MainActivity : ComponentActivity() {
         }
 
     private fun scheduleReminder(raw: String): String {
-        val match = Regex("""remind me in (\\d+)\\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\\s+to\\s+(.+)""")
+        val match = Regex("""remind me in (\d+)\s*(seconds?|secs?|minutes?|mins?|hours?|hrs?)\s+to\s+(.+)""")
             .find(raw.lowercase(Locale.ROOT)) ?: return "Try: remind me in 10 minutes to drink water."
         val amount = match.groupValues[1].toLongOrNull() ?: return "That reminder duration is invalid."
         val unit = match.groupValues[2]
@@ -323,6 +323,7 @@ class MainActivity : ComponentActivity() {
             unit.startsWith("min") -> 60L
             else -> 1L
         }
+        if (amount > 604800L / multiplier) return "Choose a reminder between 10 seconds and 7 days."
         val delaySeconds = amount * multiplier
         if (delaySeconds !in 10..604800) return "Choose a reminder between 10 seconds and 7 days."
         if (android.os.Build.VERSION.SDK_INT >= 33 &&

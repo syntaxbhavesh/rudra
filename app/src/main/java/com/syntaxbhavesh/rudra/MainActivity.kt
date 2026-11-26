@@ -284,12 +284,12 @@ private fun RudraScreen(
                 pendingWakeEnable = false
                 wakeEnabled = true
                 onWakeWordStart({
-                    wakeEnabled = false
                     listeningStatus = "Wake word detected — speak now"
                     onListen({ spoken ->
                         status = "PROCESSING"
                         submitMessage(spoken, messages, onLocalCommand, onAskShiva, onSpeak,
                             { messages = it }, { sending = it }, { status = it })
+                        if (wakeEnabled) onWakeWordStart({}, { listeningStatus = it })
                     }, { error ->
                         messages = messages + ChatMessage(role = "assistant", text = error)
                         listeningStatus = "Wake word on — waiting"

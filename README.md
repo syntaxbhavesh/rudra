@@ -6,6 +6,7 @@ RUDRA is an independent Android assistant. Its Android app, UI, settings and rep
 ## Current features
 - JARVIS-inspired dark chat interface
 - Tap-to-talk speech recognition
+- Optional app-open-only “Hey RUDRA” wake-word mode with a visible microphone/listening indicator and an in-app off switch
 - Spoken AI answers with Android Text-to-Speech
 - Typed chat with conversation context sent to Shiva
 - Streamed Shiva AI responses displayed in the chat
@@ -29,9 +30,7 @@ The inspected `/api/chat` handler currently validates message structure but does
 ## Build
 Use JDK 17 and Android SDK 35. Open in Android Studio and sync Gradle, or use the repository's GitHub Actions workflow to build a debug APK.
 
-## Roadmap
-1. Verify the AI connection and build on a physical Android device.
-2. Add optional on-device wake-word activation with a visible foreground-service microphone indicator and explicit controls.
-3. Add persistent local conversation history and user-controlled integrations.
+## Wake-word mode and privacy
+Wake-word mode is optional and only runs while the RUDRA activity is in the foreground. It stops when the app is minimized or closed, and can be switched off in the app. It uses Android `SpeechRecognizer` sessions to detect “Hey RUDRA”; this is a prototype, not a dedicated low-power keyword model. The configured recognition provider may process audio, so this feature is not advertised as fully offline. The microphone indicator remains visible while wake-word mode is enabled.
 
-Chat messages are stored locally on the device using Android app preferences. Clearing app data or uninstalling RUDRA removes this local history. RUDRA does not secretly monitor the microphone. The initial voice mode is tap-to-talk.
+Chat messages are stored locally on the device using Android app preferences (up to 200 messages). Clearing app data or uninstalling RUDRA removes this local history.

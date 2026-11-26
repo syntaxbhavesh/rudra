@@ -568,7 +568,7 @@ private fun RudraScreen(
             status = "LISTENING"
             onListen({ spoken ->
                 status = "PROCESSING"
-                submitMessage(spoken, messages, onLocalCommand, onAskShiva, onSpeak,
+                submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
                     { messages = it }, { sending = it }, { status = it })
             }, { messages = messages + ChatMessage(role = "assistant", text = it); status = "SHIVA AI CONNECTED" })
             }

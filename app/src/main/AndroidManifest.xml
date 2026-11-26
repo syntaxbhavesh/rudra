@@ -11,6 +11,10 @@
     </queries>
     <application android:allowBackup="false" android:label="RUDRA" android:usesCleartextTraffic="false" android:theme="@android:style/Theme.Material.NoActionBar">
         <receiver android:name=".ReminderReceiver" android:enabled="true" android:exported="false" />
+        <service android:name=".RudraNotificationListener" android:label="RUDRA notification reader"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE" android:exported="true">
+            <intent-filter><action android:name="android.service.notification.NotificationListenerService" /></intent-filter>
+        </service>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

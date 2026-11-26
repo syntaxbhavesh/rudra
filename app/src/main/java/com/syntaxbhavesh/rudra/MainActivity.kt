@@ -555,7 +555,7 @@ private fun RudraScreen(
                     listeningStatus = "Wake word detected — speak now"
                     onListen({ spoken ->
                         status = "PROCESSING"
-                        submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
+                        submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else ({ _: String -> }),
                             { messages = it }, { sending = it }, { status = it })
                         if (wakeEnabled) onWakeWordStart({}, { listeningStatus = it })
                     }, { error ->
@@ -568,7 +568,7 @@ private fun RudraScreen(
             status = "LISTENING"
             onListen({ spoken ->
                 status = "PROCESSING"
-                submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
+                submitMessage(spoken, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else ({ _: String -> }),
                     { messages = it }, { sending = it }, { status = it })
             }, { messages = messages + ChatMessage(role = "assistant", text = it); status = "SHIVA AI CONNECTED" })
             }
@@ -757,7 +757,7 @@ private fun RudraScreen(
                         val text = input.trim()
                         if (text.isNotEmpty() && !sending) {
                             input = ""
-                            submitMessage(text, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else {},
+                            submitMessage(text, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else ({ _: String -> }),
                                 { messages = it }, { sending = it }, { status = it })
                         }
                     }),

@@ -2,6 +2,9 @@ package com.syntaxbhavesh.rudra
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
+import android.provider.OpenableColumns
+import android.util.Base64
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -27,6 +30,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DeleteOutline
+import androidx.compose.material.icons.filled.AttachFile
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Send
 import androidx.compose.material3.*
@@ -44,6 +49,7 @@ import androidx.compose.ui.unit.sp
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.BufferedReader
+import java.io.ByteArrayOutputStream
 import java.io.InputStreamReader
 import java.net.HttpURLConnection
 import java.net.URL
@@ -57,7 +63,8 @@ private val cyan = Color(0xFF53D8FF)
 private val night = Color(0xFF050B16)
 private val panel = Color(0xFF102039)
 
-data class ChatMessage(val id: String = UUID.randomUUID().toString(), val role: String, val text: String)
+data class ChatMessage(val id: String = UUID.randomUUID().toString(), val role: String, val text: String, val attachmentName: String? = null)
+data class RudraImageAttachment(val uri: Uri, val name: String, val mimeType: String)
 
 class MainActivity : ComponentActivity() {
     private var tts: TextToSpeech? = null
@@ -79,7 +86,7 @@ class MainActivity : ComponentActivity() {
                     initialMessages = loadChatHistory(),
                     onSaveMessages = { saveChatHistory(it) },
                     onLocalCommand = { localCommand(it) },
-                    onAskShiva = { history, onChunk, onComplete -> askShiva(history, onChunk, onComplete) }
+                    onAskShiva = { history, attachment, onChunk, onComplete -> askShiva(history, attachment, onChunk, onComplete) }
                 )
             }
         }
@@ -95,7 +102,7 @@ class MainActivity : ComponentActivity() {
                 val role = item.optString("role")
                 val text = item.optString("text")
                 if ((role == "user" || role == "assistant") && text.isNotBlank()) {
-                    ChatMessage(id = item.optString("id").ifBlank { UUID.randomUUID().toString() }, role = role, text = text)
+                    ChatMessage(id = item.optString("id").ifBlank { UUID.randomUUID().toString() }, role = role, text = text, attachmentName = item.optString("attachmentName").takeIf { it.isNotBlank() })
                 } else null
             }.takeLast(200).ifEmpty {
                 listOf(ChatMessage(role = "assistant", text = "RUDRA online. Ask me anything, or tap the microphone to speak."))
@@ -108,7 +115,7 @@ class MainActivity : ComponentActivity() {
     private fun saveChatHistory(messages: List<ChatMessage>) {
         val array = JSONArray()
         messages.filter { it.text.isNotBlank() }.takeLast(200).forEach { message ->
-            array.put(JSONObject().put("id", message.id).put("role", message.role).put("text", message.text))
+            array.put(JSONObject().put("id", message.id).put("role", message.role).put("text", message.text).put("attachmentName", message.attachmentName.orEmpty()))
         }
         getSharedPreferences("rudra_chat", MODE_PRIVATE).edit().putString("messages", array.toString()).apply()
     }
@@ -438,7 +445,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun askShiva(history: List<ChatMessage>, onChunk: (String) -> Unit, onComplete: (String?) -> Unit) {
+    private fun askShiva(history: List<ChatMessage>, attachment: RudraImageAttachment?, onChunk: (String) -> Unit, onComplete: (String?) -> Unit) {
         Executors.newSingleThreadExecutor().execute {
             var connection: HttpURLConnection? = null
             try {
@@ -452,11 +459,38 @@ class MainActivity : ComponentActivity() {
                     setRequestProperty("Accept", "text/event-stream")
                 }
                 val messages = JSONArray()
-                history.filter { it.text.isNotBlank() && (it.role == "user" || it.role == "assistant") }.forEach { message ->
+                val filteredHistory = history.filter { it.text.isNotBlank() && (it.role == "user" || it.role == "assistant") }
+                filteredHistory.forEach { message ->
                     val parts = JSONArray().put(JSONObject().put("type", "text").put("text", message.text))
+                    if (attachment != null && message.id == filteredHistory.lastOrNull()?.id && message.role == "user") {
+                        val mime = attachment.mimeType.takeIf { it.startsWith("image/") } ?: "image/jpeg"
+                        val bytes = contentResolver.openInputStream(attachment.uri)?.use { input ->
+                            val output = ByteArrayOutputStream()
+                            val buffer = ByteArray(8192)
+                            var total = 0
+                            while (true) {
+                                val count = input.read(buffer)
+                                if (count < 0) break
+                                total += count
+                                if (total > 4 * 1024 * 1024) throw IllegalArgumentException("Image is larger than 4 MB. Choose a smaller image.")
+                                output.write(buffer, 0, count)
+                            }
+                            output.toByteArray()
+                        } ?: throw IllegalStateException("RUDRA could not read the selected image.")
+                        val encoded = Base64.encodeToString(bytes, Base64.NO_WRAP)
+                        parts.put(JSONObject().put("type", "file").put("mediaType", mime)
+                            .put("filename", attachment.name.take(120)).put("url", "data:$mime;base64,$encoded"))
+                    }
                     messages.put(JSONObject().put("id", message.id).put("role", message.role).put("parts", parts))
                 }
                 val body = JSONObject().put("messages", messages)
+                if (getSharedPreferences("rudra_ui", MODE_PRIVATE).getBoolean("share_memory_with_shiva", false)) {
+                    val notes = runCatching { JSONArray(getSharedPreferences("rudra_memory", MODE_PRIVATE).getString("notes", "[]") ?: "[]") }.getOrElse { JSONArray() }
+                    if (notes.length() > 0) {
+                        val memoryText = (0 until notes.length()).joinToString("\n") { notes.optString(it) }.take(12000)
+                        body.put("noteContext", JSONArray().put(JSONObject().put("name", "RUDRA on-device memory").put("text", memoryText)))
+                    }
+                }
                 connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
 
                 val code = connection.responseCode
@@ -527,7 +561,7 @@ private fun RudraScreen(
     initialMessages: List<ChatMessage>,
     onSaveMessages: (List<ChatMessage>) -> Unit,
     onLocalCommand: (String) -> String?,
-    onAskShiva: (List<ChatMessage>, (String) -> Unit, (String?) -> Unit) -> Unit
+    onAskShiva: (List<ChatMessage>, RudraImageAttachment?, (String) -> Unit, (String?) -> Unit) -> Unit
 ) {
     var messages by remember { mutableStateOf(initialMessages) }
     var input by remember { mutableStateOf("") }
@@ -541,6 +575,20 @@ private fun RudraScreen(
     val uiPreferences = remember { context.getSharedPreferences("rudra_ui", android.content.Context.MODE_PRIVATE) }
     var voiceReplies by remember { mutableStateOf(uiPreferences.getBoolean("voice_replies", true)) }
     var quickActionsVisible by remember { mutableStateOf(uiPreferences.getBoolean("quick_actions_visible", true)) }
+    var shareMemoryWithShiva by remember { mutableStateOf(uiPreferences.getBoolean("share_memory_with_shiva", false)) }
+    var selectedImage by remember { mutableStateOf<RudraImageAttachment?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) {
+            runCatching { context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            val name = runCatching {
+                context.contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+                    if (cursor.moveToFirst()) cursor.getString(0) else null
+                }
+            }.getOrNull() ?: "Selected image"
+            val mime = context.contentResolver.getType(uri) ?: "image/jpeg"
+            if (mime.startsWith("image/")) selectedImage = RudraImageAttachment(uri, name, mime)
+        }
+    }
     val listState = rememberLazyListState()
     val orbPulse by rememberInfiniteTransition(label = "rudra-orb").animateFloat(
         initialValue = 0.96f, targetValue = 1.04f,
@@ -715,6 +763,24 @@ private fun RudraScreen(
                     uiPreferences.edit().putBoolean("voice_replies", it).apply()
                 }, modifier = Modifier.height(30.dp))
             }
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                Text("SHARE SAVED MEMORY WITH SHIVA", color = Color(0xFF9CB6D4), fontSize = 8.sp)
+                Switch(checked = shareMemoryWithShiva, onCheckedChange = {
+                    shareMemoryWithShiva = it
+                    uiPreferences.edit().putBoolean("share_memory_with_shiva", it).apply()
+                }, modifier = Modifier.height(30.dp))
+            }
+            selectedImage?.let { image ->
+                Surface(color = Color(0xFF123D62), shape = RoundedCornerShape(10.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(Modifier.padding(horizontal = 10.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.AttachFile, contentDescription = null, tint = cyan)
+                        Text(image.name, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), maxLines = 1)
+                        IconButton(onClick = { selectedImage = null }, modifier = Modifier.size(28.dp)) {
+                            Icon(Icons.Default.Close, contentDescription = "Remove image", tint = Color.White)
+                        }
+                    }
+                }
+            }
             LazyColumn(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 state = listState,
@@ -736,6 +802,7 @@ private fun RudraScreen(
                             Column(Modifier.padding(13.dp)) {
                                 Text(if (isUser) "YOU" else "RUDRA", color = if (isUser) Color(0xFFBDEBFF) else cyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, letterSpacing = 1.5.sp)
                                 Spacer(Modifier.height(5.dp))
+                                message.attachmentName?.let { Text("IMAGE • $it", color = cyan, fontSize = 10.sp) }
                                 Text(message.text.ifBlank { "Thinking…" }, color = Color.White, fontSize = 14.sp, lineHeight = 20.sp)
                             }
                         }
@@ -745,7 +812,12 @@ private fun RudraScreen(
 
             if (sending) Text("SHIVA IS THINKING…", color = cyan, fontSize = 10.sp, letterSpacing = 2.sp, modifier = Modifier.padding(bottom = 7.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                IconButton(
+                    onClick = { if (!sending) imagePicker.launch(arrayOf("image/*")) },
+                    enabled = !sending,
+                    modifier = Modifier.size(42.dp).background(Color(0xFF123D62), CircleShape).border(1.dp, cyan.copy(alpha = .5f), CircleShape)
+                ) { Icon(Icons.Default.AttachFile, contentDescription = "Attach image", tint = cyan) }
                 IconButton(
                     onClick = { if (!sending) { wakeEnabled = false; pendingWakeEnable = false; onStopListening(); permission.launch(Manifest.permission.RECORD_AUDIO) } },
                     enabled = !sending,
@@ -763,10 +835,12 @@ private fun RudraScreen(
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(onSend = {
                         val text = input.trim()
-                        if (text.isNotEmpty() && !sending) {
+                        if ((text.isNotEmpty() || selectedImage != null) && !sending) {
                             input = ""
+                            val image = selectedImage
+                            selectedImage = null
                             submitMessage(text, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else ({ _: String -> }),
-                                { messages = it }, { sending = it }, { status = it })
+                                { messages = it }, { sending = it }, { status = it }, image)
                         }
                     }),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -777,13 +851,15 @@ private fun RudraScreen(
                 IconButton(
                     onClick = {
                         val text = input.trim()
-                        if (text.isNotEmpty() && !sending) {
+                        if ((text.isNotEmpty() || selectedImage != null) && !sending) {
                             input = ""
-                            submitMessage(text, messages, onLocalCommand, onAskShiva, onSpeak,
-                                { messages = it }, { sending = it }, { status = it })
+                            val image = selectedImage
+                            selectedImage = null
+                            submitMessage(text, messages, onLocalCommand, onAskShiva, if (voiceReplies) onSpeak else ({ _: String -> }),
+                                { messages = it }, { sending = it }, { status = it }, image)
                         }
                     },
-                    enabled = input.isNotBlank() && !sending,
+                    enabled = (input.isNotBlank() || selectedImage != null) && !sending,
                     modifier = Modifier.size(50.dp).background(if ((input.isNotBlank() || selectedImage != null) && !sending) cyan else Color(0xFF26394F), CircleShape)
                 ) { Icon(Icons.Default.Send, contentDescription = "Send message", tint = night) }
             }
@@ -813,10 +889,13 @@ private fun submitMessage(
     speak: (String) -> Unit,
     updateMessages: (List<ChatMessage>) -> Unit,
     updateSending: (Boolean) -> Unit,
-    updateStatus: (String) -> Unit
+    updateStatus: (String) -> Unit,
+    attachment: RudraImageAttachment? = null
 ) {
-    val history = current + ChatMessage(role = "user", text = text)
-    val localReply = localCommand(text)
+    val userText = text.ifBlank { if (attachment != null) "Please analyse this image and describe what you see." else "" }
+    if (userText.isBlank()) return
+    val history = current + ChatMessage(role = "user", text = userText, attachmentName = attachment?.name)
+    val localReply = if (attachment == null) localCommand(userText) else null
     if (localReply != null) {
         updateMessages(history + ChatMessage(role = "assistant", text = localReply))
         updateStatus("SYSTEM READY")
@@ -827,7 +906,7 @@ private fun submitMessage(
     updateMessages(history + placeholder)
     updateSending(true)
     updateStatus("CONTACTING SHIVA")
-    askShiva(history, { partial ->
+    askShiva(history, attachment, { partial ->
         updateMessages(history + placeholder.copy(text = partial))
     }) { result ->
         val finalReply = result ?: "Shiva AI could not complete the response."
